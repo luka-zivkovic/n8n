@@ -13,6 +13,7 @@ import {
 	MAX_PANEL_WIDTH,
 	type SecurityTab,
 } from '../securityScanner.constants';
+import type { SecurityFinding } from '../scanner/types';
 import SecuritySummaryBar from './SecuritySummaryBar.vue';
 import SecurityFindingCard from './SecurityFindingCard.vue';
 
@@ -67,6 +68,10 @@ function onAnalyzeWithAi() {
 
 function onNavigateToNode(nodeName: string) {
 	securityStore.navigateToNode(nodeName);
+}
+
+function onFixFindingWithAi(finding: SecurityFinding) {
+	void securityStore.fixFindingWithAi(finding);
 }
 </script>
 
@@ -144,7 +149,9 @@ function onNavigateToNode(nodeName: string) {
 							v-else
 							:key="finding.id"
 							:finding="finding"
+							:is-ai-available="isAiAvailable"
 							@navigate="onNavigateToNode"
+							@fix-with-ai="onFixFindingWithAi"
 						/>
 					</div>
 				</template>
@@ -158,8 +165,8 @@ function onNavigateToNode(nodeName: string) {
 	display: flex;
 	flex-direction: row;
 	flex-wrap: nowrap;
-	border-left: 1px solid var(--color--foreground);
-	background: var(--color--background--light-3);
+	border-left: 1px solid light-dark(var(--color--neutral-300), var(--color--foreground));
+	background: light-dark(var(--color--neutral-white), var(--color--background--light-3));
 	height: 100%;
 	overflow: hidden;
 }
@@ -197,6 +204,7 @@ function onNavigateToNode(nodeName: string) {
 
 .tabs {
 	flex-shrink: 0;
+	margin-bottom: var(--spacing--2xs);
 }
 
 .findings {

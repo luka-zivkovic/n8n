@@ -40,7 +40,8 @@ const i18n = useI18n();
 	display: flex;
 	gap: var(--spacing--sm);
 	padding: var(--spacing--2xs) var(--spacing--sm);
-	background-color: var(--color--foreground--tint-2);
+	background-color: light-dark(var(--color--neutral-100), var(--color--foreground--tint-2));
+	border: var(--border-width) var(--border-style) light-dark(var(--color--neutral-250), transparent);
 	border-radius: var(--radius--lg);
 }
 

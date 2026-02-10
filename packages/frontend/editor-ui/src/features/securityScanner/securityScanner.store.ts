@@ -9,7 +9,7 @@ import { useChatPanelStore } from '@/features/ai/assistant/chatPanel.store';
 import { useNDVStore } from '@/features/ndv/shared/ndv.store';
 
 import { runSecurityScan, computeSummary } from './scanner/runSecurityScan';
-import type { SecurityCategory } from './scanner/types';
+import type { SecurityCategory, SecurityFinding } from './scanner/types';
 import {
 	SECURITY_PANEL_LOCAL_STORAGE_KEY,
 	DEFAULT_PANEL_WIDTH,
@@ -106,24 +106,60 @@ export const useSecurityScannerStore = defineStore(STORES.SECURITY_SCANNER, () =
 		// Open the builder chat panel
 		await chatPanelStore.open({ mode: 'builder', showCoachmark: false });
 
-		// Format the static findings as context for the AI
-		const findingsContext = JSON.stringify(
-			findings.value.map((f) => ({
-				category: f.category,
-				severity: f.severity,
-				title: f.title,
-				description: f.description,
-				nodeName: f.nodeName,
-				parameterPath: f.parameterPath,
-				matchedValue: f.matchedValue,
-			})),
+		let prompt: string;
+
+		if (hasFindings.value) {
+			// Format the static findings as context for the AI
+			const findingsContext = JSON.stringify(
+				findings.value.map((f) => ({
+					category: f.category,
+					severity: f.severity,
+					title: f.title,
+					description: f.description,
+					remediation: f.remediation,
+					nodeName: f.nodeName,
+					parameterPath: f.parameterPath,
+					matchedValue: f.matchedValue,
+				})),
+				null,
+				2,
+			);
+
+			prompt = `Perform a security and PII scan of my current workflow using the security_scan tool. Here are the static analysis results for additional context:\n\n${findingsContext}\n\nAnalyze each finding, identify additional risks, assess compliance, and provide an executive summary with fix recommendations.`;
+		} else {
+			prompt =
+				'Perform a deep security and PII scan of my current workflow using the security_scan tool. The static analysis found no issues, but please look deeper for semantic risks such as unsafe data flows between nodes, implicit PII exposure, misconfigured credentials, overly permissive webhooks, or any compliance concerns. Provide an executive summary with your assessment.';
+		}
+
+		// Send the security analysis request to the builder
+		await builderStore.sendChatMessage({ text: prompt, source: 'canvas' });
+	}
+
+	async function fixFindingWithAi(finding: SecurityFinding) {
+		if (!isAiAvailable.value) return;
+
+		const chatPanelStore = useChatPanelStore();
+		const builderStore = useBuilderStore();
+
+		await chatPanelStore.open({ mode: 'builder', showCoachmark: false });
+
+		const findingContext = JSON.stringify(
+			{
+				category: finding.category,
+				severity: finding.severity,
+				title: finding.title,
+				description: finding.description,
+				remediation: finding.remediation,
+				nodeName: finding.nodeName,
+				parameterPath: finding.parameterPath,
+				matchedValue: finding.matchedValue,
+			},
 			null,
 			2,
 		);
 
-		// Send the security analysis request to the builder
 		await builderStore.sendChatMessage({
-			text: `Perform a security and PII scan of my current workflow using the security_scan tool. Here are the static analysis results for additional context:\n\n${findingsContext}\n\nAnalyze each finding, identify additional risks, assess compliance, and provide an executive summary with fix recommendations.`,
+			text: `I have a security finding in my workflow that I need help fixing. Please apply the recommended remediation to the "${finding.nodeName}" node.\n\nFinding details:\n${findingContext}\n\nPlease implement the fix directly in the workflow.`,
 			source: 'canvas',
 		});
 	}
@@ -145,5 +181,6 @@ export const useSecurityScannerStore = defineStore(STORES.SECURITY_SCANNER, () =
 		updateWidth,
 		navigateToNode,
 		analyzeWithAi,
+		fixFindingWithAi,
 	};
 });
