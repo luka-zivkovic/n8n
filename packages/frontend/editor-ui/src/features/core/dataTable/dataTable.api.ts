@@ -55,6 +55,30 @@ export const createDataTableApi = async (
 	);
 };
 
+export type CreateDataTableFromHistoryResult = DataTable & {
+	ingestedRowCount: number;
+	skippedExecutionCount: number;
+	skippedColumnNames: string[];
+	truncatedCellCount: number;
+};
+
+export const createDataTableFromExecutionHistoryApi = async (
+	context: IRestApiContext,
+	projectId: string,
+	payload: {
+		workflowId: string;
+		name: string;
+		limit: number;
+	},
+) => {
+	return await makeRestApiRequest<CreateDataTableFromHistoryResult>(
+		context,
+		'POST',
+		`/projects/${projectId}/data-tables/from-execution-history`,
+		payload,
+	);
+};
+
 export const deleteDataTableApi = async (
 	context: IRestApiContext,
 	dataTableId: string,

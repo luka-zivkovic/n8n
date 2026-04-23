@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { useI18n } from '@n8n/i18n';
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, ref, computed, watch } from 'vue';
 import { useDataTableStore } from '@/features/core/dataTable/dataTable.store';
 import { useUIStore } from '@/app/stores/ui.store';
 import { useToast } from '@/app/composables/useToast';
@@ -9,6 +9,7 @@ import { DATA_TABLE_DETAILS, PROJECT_DATA_TABLES } from '@/features/core/dataTab
 import { useTelemetry } from '@/app/composables/useTelemetry';
 import { dataTableColumnNameSchema } from '@n8n/api-types';
 import { DATA_TABLE_SYSTEM_COLUMNS } from 'n8n-workflow';
+import { useWorkflowsListStore } from '@/app/stores/workflowsList.store';
 
 import {
 	N8nButton,
@@ -16,6 +17,7 @@ import {
 	N8nIcon,
 	N8nInput,
 	N8nInputLabel,
+	N8nInputNumber,
 	N8nSelect,
 	N8nOption,
 	N8nText,
@@ -43,6 +45,7 @@ const props = defineProps<Props>();
 
 const dataTableStore = useDataTableStore();
 const uiStore = useUIStore();
+const workflowsListStore = useWorkflowsListStore();
 
 const route = useRoute();
 const router = useRouter();
@@ -62,6 +65,14 @@ const csvColumnCount = ref<number>(0);
 const isLoading = ref(false);
 const hasHeaders = ref(true);
 const isUploadHovered = ref(false);
+
+const HISTORY_LIMIT_DEFAULT = 20;
+const HISTORY_LIMIT_MIN = 1;
+const HISTORY_LIMIT_MAX = 100;
+const historySelectedWorkflowId = ref<string>('');
+const historyLimit = ref<number>(HISTORY_LIMIT_DEFAULT);
+const historyWorkflows = ref<Array<{ id: string; name: string }>>([]);
+const historyWorkflowsLoading = ref(false);
 
 const allColumnTypeOptions = [
 	{ label: 'String', value: 'string' },
@@ -134,7 +145,31 @@ onMounted(() => {
 	}, 0);
 });
 
-const selectedOption = ref<'scratch' | 'import'>('scratch');
+const selectedOption = ref<'scratch' | 'import' | 'history'>('scratch');
+
+const loadHistoryWorkflows = async () => {
+	if (historyWorkflows.value.length > 0 || historyWorkflowsLoading.value) return;
+	historyWorkflowsLoading.value = true;
+	try {
+		const projectId = (route.params.projectId as string) || undefined;
+		const data = await workflowsListStore.fetchWorkflowsPage(projectId, 1, 100, undefined, {
+			isArchived: false,
+		});
+		historyWorkflows.value = data
+			.filter((item) => item.resource !== 'folder')
+			.map((item) => ({ id: item.id, name: item.name }));
+	} catch (error) {
+		toast.showError(error, i18n.baseText('dataTable.add.fromHistory.workflowsLoadError'));
+	} finally {
+		historyWorkflowsLoading.value = false;
+	}
+};
+
+watch(selectedOption, (value) => {
+	if (value === 'history') {
+		void loadHistoryWorkflows();
+	}
+});
 
 const proceedFromSelect = async () => {
 	if (!selectedOption.value || !dataTableName.value || isLoading.value) return;
@@ -144,6 +179,9 @@ const proceedFromSelect = async () => {
 	} else if (selectedOption.value === 'import') {
 		if (!selectedFile.value) return;
 		await uploadFile();
+	} else if (selectedOption.value === 'history') {
+		if (!historySelectedWorkflowId.value) return;
+		await onSubmit();
 	}
 };
 
@@ -186,6 +224,8 @@ const reset = (clearTableName = false) => {
 	csvColumns.value = [];
 	csvRowCount.value = 0;
 	csvColumnCount.value = 0;
+	historySelectedWorkflowId.value = '';
+	historyLimit.value = HISTORY_LIMIT_DEFAULT;
 	selectedOption.value = 'scratch';
 	creationMode.value = 'select';
 };
@@ -250,6 +290,15 @@ const onSubmit = async () => {
 				csvColumns.value.map((col) => ({ name: col.name, type: col.type })),
 				uploadedFileId.value,
 				hasHeaders.value,
+			);
+		} else if (selectedOption.value === 'history' && historySelectedWorkflowId.value) {
+			newDataTable = await dataTableStore.createDataTableFromExecutionHistory(
+				route.params.projectId as string,
+				{
+					workflowId: historySelectedWorkflowId.value,
+					name: dataTableName.value,
+					limit: historyLimit.value,
+				},
 			);
 		}
 
@@ -321,7 +370,51 @@ const redirectToDataTables = () => {
 					<ElRadio label="import" data-test-id="import-csv-option">
 						{{ i18n.baseText('dataTable.add.importCsv') }}
 					</ElRadio>
+					<ElRadio label="history" data-test-id="create-from-history-option">
+						{{ i18n.baseText('dataTable.add.fromHistory') }}
+					</ElRadio>
 				</ElRadioGroup>
+
+				<div v-if="selectedOption === 'history'" :class="$style.historySection">
+					<N8nInputLabel
+						:label="i18n.baseText('dataTable.add.fromHistory.workflow.label')"
+						:required="true"
+						input-name="historyWorkflowId"
+					>
+						<N8nSelect
+							v-model="historySelectedWorkflowId"
+							:placeholder="
+								historyWorkflowsLoading
+									? i18n.baseText('dataTable.add.fromHistory.workflow.loading')
+									: i18n.baseText('dataTable.add.fromHistory.workflow.placeholder')
+							"
+							:loading="historyWorkflowsLoading"
+							filterable
+							data-test-id="history-workflow-select"
+						>
+							<N8nOption
+								v-for="workflow in historyWorkflows"
+								:key="workflow.id"
+								:label="workflow.name"
+								:value="workflow.id"
+							/>
+						</N8nSelect>
+					</N8nInputLabel>
+					<N8nInputLabel
+						:label="i18n.baseText('dataTable.add.fromHistory.limit.label')"
+						input-name="historyLimit"
+					>
+						<N8nInputNumber
+							v-model="historyLimit"
+							:min="HISTORY_LIMIT_MIN"
+							:max="HISTORY_LIMIT_MAX"
+							data-test-id="history-limit-input"
+						/>
+					</N8nInputLabel>
+					<N8nText size="small" color="text-light">
+						{{ i18n.baseText('dataTable.add.fromHistory.hint') }}
+					</N8nText>
+				</div>
 
 				<div v-if="selectedOption === 'import'" :class="$style.uploadSection">
 					<ElUpload
@@ -436,7 +529,10 @@ const redirectToDataTables = () => {
 					:loading="isLoading"
 					size="large"
 					:disabled="
-						!dataTableName || !selectedOption || (selectedOption === 'import' && !selectedFile)
+						!dataTableName ||
+						!selectedOption ||
+						(selectedOption === 'import' && !selectedFile) ||
+						(selectedOption === 'history' && !historySelectedWorkflowId)
 					"
 					:label="i18n.baseText('generic.create')"
 					data-test-id="proceed-from-select-button"
@@ -521,6 +617,12 @@ const redirectToDataTables = () => {
 }
 
 .uploadSection {
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing--sm);
+}
+
+.historySection {
 	display: flex;
 	flex-direction: column;
 	gap: var(--spacing--sm);

@@ -2,7 +2,8 @@ import {
 	UserError,
 	NodeOperationError,
 	EVALUATION_TRIGGER_NODE_TYPE,
-	jsonStringify,
+	toDataTableValue,
+	toDataTableColumnType,
 } from 'n8n-workflow';
 import type {
 	INodeParameters,
@@ -11,7 +12,6 @@ import type {
 	INodeExecutionData,
 	JsonObject,
 	JsonValue,
-	DataTableColumnJsType,
 } from 'n8n-workflow';
 
 import { getGoogleSheet, getSheet } from './evaluationTriggerUtils';
@@ -52,37 +52,7 @@ function isOutputsArray(
 	);
 }
 
-export function toDataTableValue(value: JsonValue): DataTableColumnJsType {
-	if (
-		typeof value === 'string' ||
-		typeof value === 'number' ||
-		typeof value === 'boolean' ||
-		value instanceof Date ||
-		value === null
-	)
-		return value;
-
-	return jsonStringify(value);
-}
-
-const toDataTableColumnType = (value: JsonValue) => {
-	switch (typeof value) {
-		case 'string':
-			return 'string';
-		case 'number':
-			return 'number';
-		case 'boolean':
-			return 'boolean';
-		case 'object':
-			if (value instanceof Date) {
-				return 'date';
-			}
-			// this catches null, arrays and objects
-			return 'string';
-		default:
-			return 'string';
-	}
-};
+export { toDataTableValue, toDataTableColumnType };
 
 export async function setOutputs(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 	const evaluationNode = this.getNode();

@@ -128,6 +128,11 @@ export {
 	PublicApiListDataTableContentQueryDto,
 } from './data-table/list-data-table-content-query.dto';
 export { CreateDataTableColumnDto } from './data-table/create-data-table-column.dto';
+export {
+	CreateDataTableFromExecutionHistoryDto,
+	CREATE_DATA_TABLE_FROM_EXECUTION_HISTORY_DEFAULT_LIMIT,
+	CREATE_DATA_TABLE_FROM_EXECUTION_HISTORY_MAX_LIMIT,
+} from './data-table/create-data-table-from-execution-history.dto';
 export { AddDataTableRowsDto } from './data-table/add-data-table-rows.dto';
 export { AddDataTableColumnDto } from './data-table/add-data-table-column.dto';
 export { MoveDataTableColumnDto } from './data-table/move-data-table-column.dto';

@@ -1,6 +1,7 @@
 import type {
 	AddDataTableColumnDto,
 	CreateDataTableDto,
+	CreateDataTableFromExecutionHistoryDto,
 	DeleteDataTableRowsDto,
 	ListDataTableContentQueryDto,
 	MoveDataTableColumnDto,
@@ -11,7 +12,7 @@ import type {
 	UpdateDataTableRowDto,
 } from '@n8n/api-types';
 import { Logger } from '@n8n/backend-common';
-import { ProjectRelationRepository, type User } from '@n8n/db';
+import { ExecutionRepository, ProjectRelationRepository, type User } from '@n8n/db';
 import { Service } from '@n8n/di';
 import { DateTime } from 'luxon';
 import type {
@@ -42,9 +43,12 @@ import { FileUploadError } from './errors/data-table-file-upload.error';
 import { DataTableNameConflictError } from './errors/data-table-name-conflict.error';
 import { DataTableNotFoundError } from './errors/data-table-not-found.error';
 import { DataTableValidationError } from './errors/data-table-validation.error';
+import { EmptyExecutionHistoryError } from './errors/empty-execution-history.error';
+import { inferSchemaFromExecutions } from './utils/infer-schema-from-executions';
 import { normalizeRows } from './utils/sql-utils';
 
 import { RoleService } from '@/services/role.service';
+import { WorkflowFinderService } from '@/workflows/workflow-finder.service';
 
 @Service()
 export class DataTableService {
@@ -58,6 +62,8 @@ export class DataTableService {
 		private readonly roleService: RoleService,
 		private readonly csvParserService: CsvParserService,
 		private readonly fileCleanupService: DataTableFileCleanupService,
+		private readonly executionRepository: ExecutionRepository,
+		private readonly workflowFinderService: WorkflowFinderService,
 	) {
 		this.logger = this.logger.scoped('data-table');
 	}
@@ -83,6 +89,68 @@ export class DataTableService {
 		this.dataTableSizeValidator.reset();
 
 		return result;
+	}
+
+	async createDataTableFromExecutionHistory(
+		user: User,
+		projectId: string,
+		dto: CreateDataTableFromExecutionHistoryDto,
+	) {
+		const workflow = await this.workflowFinderService.findWorkflowForUser(
+			dto.workflowId,
+			user,
+			['workflow:read'],
+		);
+
+		if (!workflow) {
+			throw new DataTableValidationError(
+				`Workflow '${dto.workflowId}' not found or you do not have access to it`,
+			);
+		}
+
+		await this.validateUniqueName(dto.name, projectId);
+
+		const executions = await this.executionRepository.findMultipleExecutions(
+			{
+				where: {
+					workflowId: dto.workflowId,
+					status: 'success',
+				},
+				order: { startedAt: 'DESC' },
+				take: dto.limit,
+			},
+			{ includeData: true, unflattenData: true },
+		);
+
+		const inferred = inferSchemaFromExecutions(executions);
+
+		if (inferred.rows.length === 0 || inferred.columns.length === 0) {
+			throw new EmptyExecutionHistoryError(dto.workflowId);
+		}
+
+		const created = await this.dataTableRepository.createDataTable(
+			projectId,
+			dto.name,
+			inferred.columns,
+		);
+
+		try {
+			await this.insertRows(created.id, projectId, inferred.rows as DataTableRows);
+		} catch (error) {
+			// roll back the empty table on insertion failure
+			await this.deleteDataTable(created.id, projectId);
+			throw error;
+		}
+
+		this.dataTableSizeValidator.reset();
+
+		return {
+			...created,
+			ingestedRowCount: inferred.rows.length,
+			skippedExecutionCount: inferred.skippedExecutions,
+			skippedColumnNames: inferred.skippedColumns,
+			truncatedCellCount: inferred.truncatedCellCount,
+		};
 	}
 
 	private async importDataFromFile(

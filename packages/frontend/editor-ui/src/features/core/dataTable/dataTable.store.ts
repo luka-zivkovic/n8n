@@ -5,6 +5,7 @@ import { useRootStore } from '@n8n/stores/useRootStore';
 import {
 	fetchDataTablesApi,
 	createDataTableApi,
+	createDataTableFromExecutionHistoryApi,
 	deleteDataTableApi,
 	updateDataTableApi,
 	addDataTableColumnApi,
@@ -93,6 +94,26 @@ export const useDataTableStore = defineStore(DATA_TABLE_STORE, () => {
 			columns,
 			fileId,
 			hasHeaders,
+		);
+		if (!newTable.project && projectId) {
+			const project = await projectStore.fetchProject(projectId);
+			if (project) {
+				newTable.project = project;
+			}
+		}
+		dataTables.value.push(newTable);
+		totalCount.value += 1;
+		return newTable;
+	};
+
+	const createDataTableFromExecutionHistory = async (
+		projectId: string,
+		payload: { workflowId: string; name: string; limit: number },
+	) => {
+		const newTable = await createDataTableFromExecutionHistoryApi(
+			rootStore.restApiContext,
+			projectId,
+			payload,
 		);
 		if (!newTable.project && projectId) {
 			const project = await projectStore.fetchProject(projectId);
@@ -355,6 +376,7 @@ export const useDataTableStore = defineStore(DATA_TABLE_STORE, () => {
 		dataTableSizes,
 		maxSizeMB,
 		createDataTable,
+		createDataTableFromExecutionHistory,
 		uploadCsvFile,
 		deleteDataTable,
 		updateDataTable,

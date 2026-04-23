@@ -8,6 +8,7 @@ export * from './constants';
 export * from './common';
 export * from './cron';
 export * from './data-table.types';
+export * from './data-table.utils';
 export * from './deferred-promise';
 export * from './execution-context';
 export * from './execution-context-establishment-hooks';

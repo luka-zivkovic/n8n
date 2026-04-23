@@ -2,6 +2,7 @@ import {
 	AddDataTableRowsDto,
 	AddDataTableColumnDto,
 	CreateDataTableDto,
+	CreateDataTableFromExecutionHistoryDto,
 	DeleteDataTableRowsDto,
 	ListDataTableContentQueryDto,
 	ListDataTableQueryDto,
@@ -33,6 +34,7 @@ import { ConflictError } from '@/errors/response-errors/conflict.error';
 import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
 import { InternalServerError } from '@/errors/response-errors/internal-server.error';
 import { NotFoundError } from '@/errors/response-errors/not-found.error';
+import { UnprocessableRequestError } from '@/errors/response-errors/unprocessable.error';
 
 import { DataTableService } from './data-table.service';
 import { DataTableColumnNameConflictError } from './errors/data-table-column-name-conflict.error';
@@ -40,6 +42,7 @@ import { DataTableNameConflictError } from './errors/data-table-name-conflict.er
 import { DataTableNotFoundError } from './errors/data-table-not-found.error';
 import { DataTableSystemColumnNameConflictError } from './errors/data-table-system-column-name-conflict.error';
 import { DataTableValidationError } from './errors/data-table-validation.error';
+import { EmptyExecutionHistoryError } from './errors/empty-execution-history.error';
 import { ProjectService } from '@/services/project.service.ee';
 import { SourceControlPreferencesService } from '@/modules/source-control.ee/source-control-preferences.service.ee';
 
@@ -111,6 +114,37 @@ export class DataTableController {
 				throw e;
 			} else if (e instanceof DataTableNameConflictError) {
 				throw new ConflictError(e.message);
+			} else {
+				throw new InternalServerError(e.message, e);
+			}
+		}
+	}
+
+	@Post('/from-execution-history')
+	@ProjectScope('dataTable:create')
+	async createDataTableFromExecutionHistory(
+		req: AuthenticatedRequest<{ projectId: string }>,
+		_res: Response,
+		@Body dto: CreateDataTableFromExecutionHistoryDto,
+	) {
+		this.checkInstanceWriteAccess();
+		try {
+			return await this.dataTableService.createDataTableFromExecutionHistory(
+				req.user,
+				req.params.projectId,
+				dto,
+			);
+		} catch (e: unknown) {
+			if (!(e instanceof Error)) {
+				throw e;
+			} else if (e instanceof EmptyExecutionHistoryError) {
+				throw new UnprocessableRequestError(e.message);
+			} else if (e instanceof DataTableNameConflictError) {
+				throw new ConflictError(e.message);
+			} else if (e instanceof DataTableValidationError) {
+				throw new BadRequestError(e.message);
+			} else if (e instanceof ResponseError) {
+				throw e;
 			} else {
 				throw new InternalServerError(e.message, e);
 			}
