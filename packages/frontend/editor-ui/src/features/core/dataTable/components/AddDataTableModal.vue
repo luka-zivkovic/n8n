@@ -326,6 +326,7 @@ const onSubmit = async () => {
 			void router.push({
 				name: DATA_TABLE_DETAILS,
 				params: {
+					projectId: newDataTable.project?.id ?? newDataTable.projectId ?? projectId,
 					id: newDataTable.id,
 				},
 			});
