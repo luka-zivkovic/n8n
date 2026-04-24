@@ -124,8 +124,21 @@ export class DataTableService {
 
 		const inferred = inferSchemaFromExecutions(executions);
 
+		this.logger.debug('createDataTableFromExecutionHistory inference result', {
+			workflowId: dto.workflowId,
+			executionsFetched: executions.length,
+			rowCount: inferred.rows.length,
+			columnCount: inferred.columns.length,
+			skippedExecutions: inferred.skippedExecutions,
+			skippedColumns: inferred.skippedColumns,
+		});
+
+		if (executions.length === 0) {
+			throw new EmptyExecutionHistoryError(dto.workflowId, 'no-executions');
+		}
+
 		if (inferred.rows.length === 0 || inferred.columns.length === 0) {
-			throw new EmptyExecutionHistoryError(dto.workflowId);
+			throw new EmptyExecutionHistoryError(dto.workflowId, 'no-usable-data');
 		}
 
 		const created = await this.dataTableRepository.createDataTable(

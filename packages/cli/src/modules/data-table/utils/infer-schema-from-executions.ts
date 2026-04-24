@@ -34,16 +34,33 @@ export type InferSchemaResult = {
 	truncatedCellCount: number;
 };
 
+function getTaskJson(task: ITaskData): IDataObject | null {
+	const items = task.data?.main?.[0] as INodeExecutionData[] | null | undefined;
+	const json = items?.[0]?.json;
+	if (json && typeof json === 'object') return json;
+	return null;
+}
+
+function hasUsableKeys(payload: IDataObject | null): boolean {
+	if (!payload) return false;
+	for (const key of Object.keys(payload)) {
+		if (!RESERVED_COLUMN_NAMES.has(key)) return true;
+	}
+	return false;
+}
+
 /**
- * Picks the trigger output payload from a successful execution's runData.
+ * Picks the seed payload for a successful execution.
  *
- * The "production trigger" is the first-executed node (lowest executionIndex)
- * whose source is [null] (i.e. has no upstream node) and whose type is not the
- * EvaluationTrigger. This makes it robust across workflows with multiple
- * triggers and across executions that started from different ones.
+ * Strategy:
+ * 1. Identify "production trigger" candidates — runData entries whose node is
+ *    not the EvaluationTrigger, not disabled, and has no upstream source.
+ * 2. Walk runs in execution order (lowest executionIndex first). Take the
+ *    first one whose `data.main[0][0].json` has at least one non-reserved key.
+ * 3. If no trigger output has usable keys (common for the manual trigger which
+ *    emits `{}`), fall back to the first downstream node with usable output.
  *
- * Returns null when no usable trigger output can be found, in which case the
- * caller should skip the execution.
+ * Returns null when no usable payload can be found.
  */
 export function pickProductionTriggerOutput(execution: IExecutionResponse): IDataObject | null {
 	const runData = execution.data?.resultData?.runData;
@@ -54,33 +71,42 @@ export function pickProductionTriggerOutput(execution: IExecutionResponse): IDat
 		nodesByName.set(node.name, node);
 	}
 
-	type Candidate = { name: string; task: ITaskData };
+	type Candidate = { name: string; task: ITaskData; isTrigger: boolean };
 	const candidates: Candidate[] = [];
 
 	for (const [name, taskRuns] of Object.entries(runData)) {
 		const node = nodesByName.get(name);
-		if (!node) continue;
-		if (node.type === EVALUATION_TRIGGER_NODE_TYPE) continue;
-		if (node.disabled) continue;
+		if (node?.type === EVALUATION_TRIGGER_NODE_TYPE) continue;
+		if (node?.disabled) continue;
 
 		const firstRun = taskRuns?.[0];
 		if (!firstRun) continue;
 
 		const source = firstRun.source ?? [];
-		const hasNoSource = source.length === 0 || source.every((s) => s === null);
-		if (!hasNoSource) continue;
+		const isTrigger = source.length === 0 || source.every((s) => s === null);
 
-		candidates.push({ name, task: firstRun });
+		candidates.push({ name, task: firstRun, isTrigger });
 	}
 
 	if (candidates.length === 0) return null;
 
 	candidates.sort((a, b) => (a.task.executionIndex ?? 0) - (b.task.executionIndex ?? 0));
 
+	// First pass: trigger nodes with usable keys (the ideal case — webhook,
+	// schedule with payload, etc.).
 	for (const candidate of candidates) {
-		const items = candidate.task.data?.main?.[0] as INodeExecutionData[] | null | undefined;
-		const json = items?.[0]?.json;
-		if (json && typeof json === 'object') return json;
+		if (!candidate.isTrigger) continue;
+		const json = getTaskJson(candidate.task);
+		if (hasUsableKeys(json)) return json;
+	}
+
+	// Fallback: the first non-trigger node with usable keys. This covers
+	// manual-trigger workflows where the trigger emits {} and the seed data
+	// only appears once the first downstream node runs.
+	for (const candidate of candidates) {
+		if (candidate.isTrigger) continue;
+		const json = getTaskJson(candidate.task);
+		if (hasUsableKeys(json)) return json;
 	}
 
 	return null;

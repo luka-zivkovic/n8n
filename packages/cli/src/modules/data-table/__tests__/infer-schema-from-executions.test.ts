@@ -81,18 +81,39 @@ describe('pickProductionTriggerOutput', () => {
 		expect(pickProductionTriggerOutput(exec)).toBeNull();
 	});
 
-	it('skips candidates whose source is not [null]', () => {
+	it('falls back to first non-trigger node when trigger emits empty payload (manual trigger case)', () => {
 		const exec = makeExecution(
 			{
-				ChildNode: [
+				ManualTrigger: [makeTask({}, { executionIndex: 0 })],
+				HttpRequest: [
 					makeTask(
-						{ name: 'no-trigger' },
-						{ executionIndex: 0, source: [{ previousNode: 'Trigger' }] },
+						{ id: 1, email: 'alice@example.com' },
+						{ executionIndex: 1, source: [{ previousNode: 'ManualTrigger' }] },
 					),
 				],
 			},
-			[{ name: 'ChildNode', type: 'n8n-nodes-base.set' }],
+			[
+				{ name: 'ManualTrigger', type: 'n8n-nodes-base.manualTrigger' },
+				{ name: 'HttpRequest', type: 'n8n-nodes-base.httpRequest' },
+			],
 		);
+		expect(pickProductionTriggerOutput(exec)).toEqual({ id: 1, email: 'alice@example.com' });
+	});
+
+	it('does not fall back when only-reserved-key payloads exist downstream', () => {
+		const exec = makeExecution(
+			{
+				ManualTrigger: [makeTask({}, { executionIndex: 0 })],
+				NoData: [
+					makeTask({ id: 1 }, { executionIndex: 1, source: [{ previousNode: 'ManualTrigger' }] }),
+				],
+			},
+			[
+				{ name: 'ManualTrigger', type: 'n8n-nodes-base.manualTrigger' },
+				{ name: 'NoData', type: 'n8n-nodes-base.set' },
+			],
+		);
+		// `id` is reserved, so this payload has no usable keys → null
 		expect(pickProductionTriggerOutput(exec)).toBeNull();
 	});
 
