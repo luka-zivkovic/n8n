@@ -22,7 +22,15 @@ import { useIntersectionObserver } from '@/app/composables/useIntersectionObserv
 import { useUIStore } from '@/app/stores/ui.store';
 import { ADD_DATA_TABLE_MODAL_KEY } from '@/features/core/dataTable/constants';
 
-import { N8nButton, N8nCheckbox, N8nHeading, N8nLoading, N8nText } from '@n8n/design-system';
+import {
+	N8nActionToggle,
+	N8nCheckbox,
+	N8nHeading,
+	N8nLoading,
+	N8nText,
+} from '@n8n/design-system';
+
+const EVAL_DATASET_ACTION = 'create-eval-dataset';
 type AutoScrollDeps = { activeExecutionSet: boolean; cardsMounted: boolean; scroll: boolean };
 
 const props = defineProps<{
@@ -177,9 +185,16 @@ const goToUpgrade = () => {
 	void pageRedirectionHelper.goToUpgrade('concurrency', 'upgrade-concurrency');
 };
 
-const canCreateEvalDataset = computed(
-	() => Boolean(props.workflow?.id) && (props.executions?.length ?? 0) > 0,
-);
+const executionActions = computed(() => {
+	if (!props.workflow?.id || (props.executions?.length ?? 0) === 0) return [];
+	return [
+		{
+			label: i18n.baseText('executionsList.actions.createEvalDataset'),
+			value: EVAL_DATASET_ACTION,
+			disabled: false,
+		},
+	];
+});
 
 const onCreateEvalDataset = () => {
 	if (!props.workflow?.id) return;
@@ -192,6 +207,10 @@ const onCreateEvalDataset = () => {
 			projectId: props.workflow.homeProject?.id,
 		},
 	});
+};
+
+const onExecutionAction = (action: string) => {
+	if (action === EVAL_DATASET_ACTION) onCreateEvalDataset();
 };
 </script>
 
@@ -210,6 +229,13 @@ const onCreateEvalDataset = () => {
 				@go-to-upgrade="goToUpgrade"
 			/>
 			<ExecutionStopAllText :executions="props.executions" />
+			<N8nActionToggle
+				v-if="executionActions.length > 0"
+				:actions="executionActions"
+				placement="bottom-end"
+				data-test-id="executions-sidebar-actions"
+				@action="onExecutionAction"
+			/>
 		</div>
 		<div :class="$style.controls">
 			<N8nCheckbox
@@ -222,16 +248,6 @@ const onCreateEvalDataset = () => {
 				popover-side="right"
 				popover-align="start"
 				@filter-changed="onFilterChanged"
-			/>
-		</div>
-		<div v-if="canCreateEvalDataset" :class="$style.evalDatasetCta">
-			<N8nButton
-				type="secondary"
-				size="mini"
-				icon="database"
-				:label="i18n.baseText('executionsList.createEvalDataset')"
-				data-test-id="create-eval-dataset-from-executions"
-				@click="onCreateEvalDataset"
 			/>
 		</div>
 		<div
@@ -314,11 +330,6 @@ const onCreateEvalDataset = () => {
 		display: flex;
 		align-items: center;
 	}
-}
-
-.evalDatasetCta {
-	padding-top: var(--spacing--xs);
-	padding-right: var(--spacing--md);
 }
 
 .executionList {

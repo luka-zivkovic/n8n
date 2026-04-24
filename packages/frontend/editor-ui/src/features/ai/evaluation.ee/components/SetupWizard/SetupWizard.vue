@@ -8,6 +8,8 @@ import StepHeader from '../shared/StepHeader.vue';
 import { useRouter } from 'vue-router';
 import { useUsageStore } from '@/features/settings/usage/usage.store';
 import { usePageRedirectionHelper } from '@/app/composables/usePageRedirectionHelper';
+import { useUIStore } from '@/app/stores/ui.store';
+import { ADD_DATA_TABLE_MODAL_KEY } from '@/features/core/dataTable/constants';
 import { I18nT } from 'vue-i18n';
 
 import { N8nButton, N8nCallout, N8nText } from '@n8n/design-system';
@@ -21,6 +23,7 @@ const workflowsStore = useWorkflowsStore();
 const evaluationStore = useEvaluationStore();
 const usageStore = useUsageStore();
 const pageRedirectionHelper = usePageRedirectionHelper();
+const uiStore = useUIStore();
 
 const hasRuns = computed(() => {
 	return evaluationStore.testRunsByWorkflowId[workflowsStore.workflow.id]?.length > 0;
@@ -86,6 +89,24 @@ function navigateToWorkflow(
 function onSeePlans() {
 	void pageRedirectionHelper.goToUpgrade('evaluations', 'upgrade-evaluations');
 }
+
+const canSeedFromHistory = computed(() => {
+	const id = workflowsStore.workflow.id;
+	return Boolean(id) && id !== 'new';
+});
+
+const onSeedFromHistory = () => {
+	const workflow = workflowsStore.workflow;
+	uiStore.openModalWithData({
+		name: ADD_DATA_TABLE_MODAL_KEY,
+		data: {
+			initialMode: 'history',
+			initialWorkflowId: workflow.id,
+			initialWorkflowName: workflow.name,
+			projectId: workflow.homeProject?.id,
+		},
+	});
+};
 </script>
 
 <template>
@@ -121,6 +142,15 @@ function onSeePlans() {
 							@click="navigateToWorkflow('addEvaluationTrigger')"
 						>
 							{{ locale.baseText('evaluations.setupWizard.step1.button') }}
+						</N8nButton>
+						<N8nButton
+							v-if="canSeedFromHistory"
+							size="small"
+							type="tertiary"
+							data-test-id="setup-wizard-seed-from-history"
+							@click="onSeedFromHistory"
+						>
+							{{ locale.baseText('evaluations.setupWizard.step1.seedFromHistory') }}
 						</N8nButton>
 					</div>
 				</div>
