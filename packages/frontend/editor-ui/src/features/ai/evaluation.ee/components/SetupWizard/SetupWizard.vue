@@ -9,6 +9,7 @@ import { useRouter } from 'vue-router';
 import { useUsageStore } from '@/features/settings/usage/usage.store';
 import { usePageRedirectionHelper } from '@/app/composables/usePageRedirectionHelper';
 import { useUIStore } from '@/app/stores/ui.store';
+import { useProjectsStore } from '@/features/collaboration/projects/projects.store';
 import { ADD_DATA_TABLE_MODAL_KEY } from '@/features/core/dataTable/constants';
 import { I18nT } from 'vue-i18n';
 
@@ -24,6 +25,7 @@ const evaluationStore = useEvaluationStore();
 const usageStore = useUsageStore();
 const pageRedirectionHelper = usePageRedirectionHelper();
 const uiStore = useUIStore();
+const projectsStore = useProjectsStore();
 
 const hasRuns = computed(() => {
 	return evaluationStore.testRunsByWorkflowId[workflowsStore.workflow.id]?.length > 0;
@@ -90,20 +92,25 @@ function onSeePlans() {
 	void pageRedirectionHelper.goToUpgrade('evaluations', 'upgrade-evaluations');
 }
 
+const seedProjectId = computed(
+	() => workflowsStore.workflow.homeProject?.id ?? projectsStore.currentProjectId ?? undefined,
+);
+
 const canSeedFromHistory = computed(() => {
 	const id = workflowsStore.workflow.id;
-	return Boolean(id) && id !== 'new';
+	return Boolean(id) && id !== 'new' && Boolean(seedProjectId.value);
 });
 
 const onSeedFromHistory = () => {
 	const workflow = workflowsStore.workflow;
+	if (!seedProjectId.value) return;
 	uiStore.openModalWithData({
 		name: ADD_DATA_TABLE_MODAL_KEY,
 		data: {
 			initialMode: 'history',
 			initialWorkflowId: workflow.id,
 			initialWorkflowName: workflow.name,
-			projectId: workflow.homeProject?.id,
+			projectId: seedProjectId.value,
 		},
 	});
 };

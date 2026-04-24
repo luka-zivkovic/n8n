@@ -20,6 +20,7 @@ import ExecutionStopAllText from '../ExecutionStopAllText.vue';
 import { usePageRedirectionHelper } from '@/app/composables/usePageRedirectionHelper';
 import { useIntersectionObserver } from '@/app/composables/useIntersectionObserver';
 import { useUIStore } from '@/app/stores/ui.store';
+import { useProjectsStore } from '@/features/collaboration/projects/projects.store';
 import { ADD_DATA_TABLE_MODAL_KEY } from '@/features/core/dataTable/constants';
 
 import {
@@ -57,6 +58,7 @@ const executionsStore = useExecutionsStore();
 const settingsStore = useSettingsStore();
 const pageRedirectionHelper = usePageRedirectionHelper();
 const uiStore = useUIStore();
+const projectsStore = useProjectsStore();
 
 const autoScrollDeps = ref<AutoScrollDeps>({
 	activeExecutionSet: false,
@@ -185,8 +187,18 @@ const goToUpgrade = () => {
 	void pageRedirectionHelper.goToUpgrade('concurrency', 'upgrade-concurrency');
 };
 
+const resolvedProjectId = computed(
+	() => props.workflow?.homeProject?.id ?? projectsStore.currentProjectId ?? undefined,
+);
+
 const executionActions = computed(() => {
-	if (!props.workflow?.id || (props.executions?.length ?? 0) === 0) return [];
+	if (
+		!props.workflow?.id ||
+		(props.executions?.length ?? 0) === 0 ||
+		!resolvedProjectId.value
+	) {
+		return [];
+	}
 	return [
 		{
 			label: i18n.baseText('executionsList.actions.createEvalDataset'),
@@ -197,14 +209,14 @@ const executionActions = computed(() => {
 });
 
 const onCreateEvalDataset = () => {
-	if (!props.workflow?.id) return;
+	if (!props.workflow?.id || !resolvedProjectId.value) return;
 	uiStore.openModalWithData({
 		name: ADD_DATA_TABLE_MODAL_KEY,
 		data: {
 			initialMode: 'history',
 			initialWorkflowId: props.workflow.id,
 			initialWorkflowName: props.workflow.name,
-			projectId: props.workflow.homeProject?.id,
+			projectId: resolvedProjectId.value,
 		},
 	});
 };
