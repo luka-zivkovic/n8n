@@ -19,8 +19,10 @@ import ConcurrentExecutionsHeader from '../ConcurrentExecutionsHeader.vue';
 import ExecutionStopAllText from '../ExecutionStopAllText.vue';
 import { usePageRedirectionHelper } from '@/app/composables/usePageRedirectionHelper';
 import { useIntersectionObserver } from '@/app/composables/useIntersectionObserver';
+import { useUIStore } from '@/app/stores/ui.store';
+import { ADD_DATA_TABLE_MODAL_KEY } from '@/features/core/dataTable/constants';
 
-import { N8nCheckbox, N8nHeading, N8nLoading, N8nText } from '@n8n/design-system';
+import { N8nButton, N8nCheckbox, N8nHeading, N8nLoading, N8nText } from '@n8n/design-system';
 type AutoScrollDeps = { activeExecutionSet: boolean; cardsMounted: boolean; scroll: boolean };
 
 const props = defineProps<{
@@ -46,6 +48,7 @@ const i18n = useI18n();
 const executionsStore = useExecutionsStore();
 const settingsStore = useSettingsStore();
 const pageRedirectionHelper = usePageRedirectionHelper();
+const uiStore = useUIStore();
 
 const autoScrollDeps = ref<AutoScrollDeps>({
 	activeExecutionSet: false,
@@ -173,6 +176,23 @@ function scrollToActiveCard(): void {
 const goToUpgrade = () => {
 	void pageRedirectionHelper.goToUpgrade('concurrency', 'upgrade-concurrency');
 };
+
+const canCreateEvalDataset = computed(
+	() => Boolean(props.workflow?.id) && (props.executions?.length ?? 0) > 0,
+);
+
+const onCreateEvalDataset = () => {
+	if (!props.workflow?.id) return;
+	uiStore.openModalWithData({
+		name: ADD_DATA_TABLE_MODAL_KEY,
+		data: {
+			initialMode: 'history',
+			initialWorkflowId: props.workflow.id,
+			initialWorkflowName: props.workflow.name,
+			projectId: props.workflow.homeProject?.id,
+		},
+	});
+};
 </script>
 
 <template>
@@ -202,6 +222,16 @@ const goToUpgrade = () => {
 				popover-side="right"
 				popover-align="start"
 				@filter-changed="onFilterChanged"
+			/>
+		</div>
+		<div v-if="canCreateEvalDataset" :class="$style.evalDatasetCta">
+			<N8nButton
+				type="secondary"
+				size="mini"
+				icon="database"
+				:label="i18n.baseText('executionsList.createEvalDataset')"
+				data-test-id="create-eval-dataset-from-executions"
+				@click="onCreateEvalDataset"
 			/>
 		</div>
 		<div
@@ -284,6 +314,11 @@ const goToUpgrade = () => {
 		display: flex;
 		align-items: center;
 	}
+}
+
+.evalDatasetCta {
+	padding-top: var(--spacing--xs);
+	padding-right: var(--spacing--md);
 }
 
 .executionList {

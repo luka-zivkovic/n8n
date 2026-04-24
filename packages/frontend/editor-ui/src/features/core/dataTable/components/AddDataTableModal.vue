@@ -28,6 +28,12 @@ import type { UploadFile } from 'element-plus';
 
 type Props = {
 	modalName: string;
+	data?: {
+		initialMode?: 'scratch' | 'import' | 'history';
+		initialWorkflowId?: string;
+		initialWorkflowName?: string;
+		projectId?: string;
+	};
 };
 
 type CreationMode = 'select' | 'scratch' | 'import' | 'file-selected';
@@ -139,6 +145,18 @@ const isCreateDisabled = computed(() => {
 });
 
 onMounted(() => {
+	if (props.data?.initialMode) {
+		selectedOption.value = props.data.initialMode;
+		if (props.data.initialMode === 'history') {
+			void loadHistoryWorkflows();
+			if (props.data.initialWorkflowId) {
+				historySelectedWorkflowId.value = props.data.initialWorkflowId;
+			}
+			if (props.data.initialWorkflowName && !dataTableName.value) {
+				dataTableName.value = `${props.data.initialWorkflowName} eval dataset`;
+			}
+		}
+	}
 	setTimeout(() => {
 		inputRef.value?.focus();
 		inputRef.value?.select();
@@ -277,29 +295,24 @@ const onSubmit = async () => {
 	isLoading.value = true;
 	try {
 		let newDataTable;
+		const projectId = props.data?.projectId ?? (route.params.projectId as string);
 
 		if (selectedOption.value === 'scratch') {
-			newDataTable = await dataTableStore.createDataTable(
-				dataTableName.value,
-				route.params.projectId as string,
-			);
+			newDataTable = await dataTableStore.createDataTable(dataTableName.value, projectId);
 		} else if (creationMode.value === 'import' && uploadedFileId.value) {
 			newDataTable = await dataTableStore.createDataTable(
 				dataTableName.value,
-				route.params.projectId as string,
+				projectId,
 				csvColumns.value.map((col) => ({ name: col.name, type: col.type })),
 				uploadedFileId.value,
 				hasHeaders.value,
 			);
 		} else if (selectedOption.value === 'history' && historySelectedWorkflowId.value) {
-			newDataTable = await dataTableStore.createDataTableFromExecutionHistory(
-				route.params.projectId as string,
-				{
-					workflowId: historySelectedWorkflowId.value,
-					name: dataTableName.value,
-					limit: historyLimit.value,
-				},
-			);
+			newDataTable = await dataTableStore.createDataTableFromExecutionHistory(projectId, {
+				workflowId: historySelectedWorkflowId.value,
+				name: dataTableName.value,
+				limit: historyLimit.value,
+			});
 		}
 
 		if (newDataTable) {
